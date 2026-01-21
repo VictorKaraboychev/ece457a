@@ -28,22 +28,17 @@ def bfs(maze, start, end):
     visited = {tuple(start)}
     came_from = {}
 
-    start_tuple = tuple(start)
-    end_tuple = tuple(end)
-
     while queue:
         current = queue.popleft()
 
         # Check if we reached the goal
-        if current == end_tuple:
+        if current == tuple(end):
             # Reconstruct path
-            path = []
+            path = [list(start)]
             while current in came_from:
-                path.append(list(current))
+                path.insert(1, list(current))
                 current = came_from[current]
-            path.append(list(start_tuple))
-            path.reverse()
-            return path
+            return path, visited
 
         # Explore neighbors
         for neighbor in get_neighbors(maze, current):
@@ -53,7 +48,7 @@ def bfs(maze, start, end):
                 queue.append(neighbor)
 
     # No path found
-    return None
+    return None, visited
 
 
 def dfs(maze, start, end):
@@ -62,22 +57,17 @@ def dfs(maze, start, end):
     visited = {tuple(start)}
     came_from = {}
 
-    start_tuple = tuple(start)
-    end_tuple = tuple(end)
-
     while stack:
         current = stack.pop()
 
         # Check if we reached the goal
-        if current == end_tuple:
+        if current == tuple(end):
             # Reconstruct path
-            path = []
+            path = [list(start)]
             while current in came_from:
-                path.append(list(current))
+                path.insert(1, list(current))
                 current = came_from[current]
-            path.append(list(start_tuple))
-            path.reverse()
-            return path
+            return path, visited
 
         # Explore neighbors
         for neighbor in get_neighbors(maze, current):
@@ -87,7 +77,7 @@ def dfs(maze, start, end):
                 stack.append(neighbor)
 
     # No path found
-    return None
+    return None, visited
 
 
 def astar(maze, start, end):
@@ -95,66 +85,53 @@ def astar(maze, start, end):
         # manhattan distance
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-    # Initialize data structures
-    open_set = []  # Priority queue: (f_score, g_score, position)
-    heapq.heappush(open_set, (0, 0, tuple(start)))
+    priority_queue = []
+    heapq.heappush(priority_queue, (0, 0, tuple(start)))
+    visited = {tuple(start)}
 
     came_from = {}  # Track path
     g_score = {tuple(start): 0}  # Cost from start
     f_score = {tuple(start): heuristic(start, end)}  # Estimated total cost
 
-    closed_set = set()
-
-    start_tuple = tuple(start)
-    end_tuple = tuple(end)
-
-    while open_set:
-        # Get node with lowest f_score
-        current_f, current_g, current = heapq.heappop(open_set)
-
-        # Skip if already processed with a better path
-        if current in closed_set:
-            continue
-
-        closed_set.add(current)
+    while priority_queue:
+        current_f, current_g, current = heapq.heappop(priority_queue)
 
         # Check if we reached the goal
-        if current == end_tuple:
+        if current == tuple(end):
             # Reconstruct path
-            path = []
+            path = [list(start)]
             while current in came_from:
-                path.append(list(current))
+                path.insert(1, list(current))
                 current = came_from[current]
-            path.append(list(start_tuple))
-            path.reverse()
-            return path
+            return path, visited
 
         # Explore neighbors
         for neighbor in get_neighbors(maze, current):
-            if neighbor in closed_set:
-                continue
+            if neighbor not in visited:
+                visited.add(neighbor)
+                # Calculate tentative g_score
+                tentative_g = g_score[current] + 1  # Each step costs 1
 
-            # Calculate tentative g_score
-            tentative_g = g_score[current] + 1  # Each step costs 1
-
-            # If this path to neighbor is better, record it
-            if neighbor not in g_score or tentative_g < g_score[neighbor]:
-                came_from[neighbor] = current
-                g_score[neighbor] = tentative_g
-                f_score[neighbor] = tentative_g + heuristic(neighbor, end)
-                heapq.heappush(open_set, (f_score[neighbor], tentative_g, neighbor))
+                # If this path to neighbor is better, record it
+                if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    f_score[neighbor] = tentative_g + heuristic(neighbor, end)
+                    heapq.heappush(
+                        priority_queue, (f_score[neighbor], tentative_g, neighbor)
+                    )
 
     # No path found
-    return None
+    return None, visited
 
 
-bfs_path = bfs(maze, start, end)
-dfs_path = dfs(maze, start, end)
-astar_path = astar(maze, start, end)
+bfs_path, bfs_visited = bfs(maze, start, end)
+dfs_path, dfs_visited = dfs(maze, start, end)
+astar_path, astar_visited = astar(maze, start, end)
 
-print(f"BFS Path Cost: {len(bfs_path)}")
-display(maze, bfs_path)
-print(f"DFS Path Cost: {len(dfs_path)}")
-display(maze, dfs_path)
-print(f"A* Path Cost: {len(astar_path)}")
-display(maze, astar_path)
+print(f"BFS Path Cost: {len(bfs_path)} Expanded: {len(bfs_visited)}")
+display(maze, bfs_path, bfs_visited)
+print(f"DFS Path Cost: {len(dfs_path)} Expanded: {len(dfs_visited)}")
+display(maze, dfs_path, dfs_visited)
+print(f"A* Path Cost: {len(astar_path)} Expanded: {len(astar_visited)}")
+display(maze, astar_path, astar_visited)

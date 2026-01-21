@@ -31,9 +31,15 @@ end = [19, 23]
 
 
 # display map with optional path visualization
-def display(m, path=None):
+def display(m, path=None, visited=None):
     # Create a copy to avoid modifying the original
     display = [row[:] for row in m]
+
+    if visited:
+        for pos in visited:
+            row, col = pos
+            if display[row][col] != 1:  # Don't overwrite walls
+                display[row][col] = 4  # Mark as visited
 
     # Mark path cells (if path provided)
     if path:
@@ -44,12 +50,13 @@ def display(m, path=None):
 
     # Characters for visualization
     chars = {
-        0: chr(0x2591),  # Empty (light shade)
-        1: chr(0x25A0),  # Wall (black square)
-        2: chr(0x263B),  # Start/End (smiley face)
-        3: "*",  # Path
+        0: "░░",  # Empty (light shade)
+        1: "██",  # Wall (black square)
+        2: "★ ",  # Start/End (smiley face)
+        3: "**",  # Path
+        4: "▒▒",  # Visited
     }
 
     # Display from top to bottom (reverse the rows)
     for row in reversed(display):
-        print(" ".join(chars.get(cell, "?") for cell in row))
+        print("".join(chars.get(cell, "??") for cell in row))
