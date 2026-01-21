@@ -23,7 +23,6 @@ def get_neighbors(maze, pos):
 
 
 def bfs(maze, start, end):
-    # Initialize queue with start position
     queue = deque([tuple(start)])
     visited = {tuple(start)}
     came_from = {}
@@ -52,7 +51,6 @@ def bfs(maze, start, end):
 
 
 def dfs(maze, start, end):
-    # Initialize stack with start position
     stack = [tuple(start)]
     visited = {tuple(start)}
     came_from = {}
@@ -88,8 +86,8 @@ def astar(maze, start, end):
     priority_queue = []
     heapq.heappush(priority_queue, (0, 0, tuple(start)))
     visited = {tuple(start)}
-
     came_from = {}  # Track path
+    
     g_score = {tuple(start): 0}  # Cost from start
 
     while priority_queue:
