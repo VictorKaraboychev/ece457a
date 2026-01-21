@@ -91,7 +91,6 @@ def astar(maze, start, end):
 
     came_from = {}  # Track path
     g_score = {tuple(start): 0}  # Cost from start
-    f_score = {tuple(start): heuristic(start, end)}  # Estimated total cost
 
     while priority_queue:
         current_f, current_g, current = heapq.heappop(priority_queue)
@@ -116,9 +115,9 @@ def astar(maze, start, end):
                 if neighbor not in g_score or tentative_g < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
-                    f_score[neighbor] = tentative_g + heuristic(neighbor, end)
+                    f_score = tentative_g + heuristic(neighbor, end)
                     heapq.heappush(
-                        priority_queue, (f_score[neighbor], tentative_g, neighbor)
+                        priority_queue, (f_score, tentative_g, neighbor)
                     )
 
     # No path found
