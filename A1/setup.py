@@ -26,8 +26,14 @@ maze = [
     [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
 ]
 
-start = [11, 2]
-end = [19, 23]
+# start = [11, 2]
+# end = [19, 23]
+
+# start = [11, 2]
+# end = [21, 2]
+
+start = [0, 0]
+end = [24, 24]
 
 
 # display map with optional path visualization
