@@ -48,12 +48,20 @@ def display(m, path=None, visited=None):
             if display[row][col] != 1:  # Don't overwrite walls
                 display[row][col] = 3  # Mark as path
 
+    # Mark start and end cells
+    if start:
+        row, col = start
+        display[row][col] = 2
+    if end:
+        row, col = end
+        display[row][col] = 2
+
     # Characters for visualization
     chars = {
-        0: "░░",  # Empty (light shade)
-        1: "██",  # Wall (black square)
-        2: "★ ",  # Start/End (smiley face)
-        3: "**",  # Path
+        0: "░░",  # Empty
+        1: "██",  # Wall
+        2: "★ ",  # Start/End
+        3: "  ",  # Path
         4: "▒▒",  # Visited
     }
 
