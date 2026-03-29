@@ -21,7 +21,6 @@ import argparse
 import csv
 import importlib
 import math
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +46,8 @@ except ImportError as exc:
 DIM = 49
 FITNESS_TARGET = 475.0
 DEFAULT_EVAL_SEEDS = (11, 23, 37, 41, 59)  # fixed across all algorithms
+ALGO_PSO = "PSO"
+ALGO_ES = "ES_mu+lambda"
 
 
 def decode_weights(w: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
@@ -171,6 +172,12 @@ def push_curve(curve: np.ndarray, start_eval: int, vals: np.ndarray, best_so_far
     return b
 
 
+def first_hit_eval(curve: np.ndarray, threshold: float = FITNESS_TARGET) -> int:
+    """Return 1-based evaluation index of first threshold hit, or -1."""
+    hit_mask = curve >= threshold
+    return int(np.argmax(hit_mask) + 1) if np.any(hit_mask) else -1
+
+
 @dataclass
 class RunResult:
     final_best: float
@@ -208,9 +215,7 @@ def run_pso(
     running_best = -math.inf
     running_best = push_curve(eval_curve, 0, fx, running_best)
 
-    gen = 0
     while eval_idx + pop_size <= max_evals:
-        gen += 1
         w_inertia = 0.9 - 0.5 * (eval_idx / max_evals)  # linearly decays to ~0.4
         r1 = rng.random(size=(pop_size, dim))
         r2 = rng.random(size=(pop_size, dim))
@@ -235,7 +240,7 @@ def run_pso(
             gbest_f = float(pbest_f[new_g_idx])
             gbest = pbest[new_g_idx].copy()
 
-    evals_to_target = int(np.argmax(eval_curve >= FITNESS_TARGET) + 1) if np.any(eval_curve >= FITNESS_TARGET) else -1
+    evals_to_target = first_hit_eval(eval_curve)
     return RunResult(
         final_best=float(np.max(eval_curve)),
         curve=eval_curve,
@@ -302,7 +307,7 @@ def run_es_mu_plus_lambda(
         parents = combined[order[:mu]]
         parent_fit = combined_fit[order[:mu]]
 
-    evals_to_target = int(np.argmax(eval_curve >= FITNESS_TARGET) + 1) if np.any(eval_curve >= FITNESS_TARGET) else -1
+    evals_to_target = first_hit_eval(eval_curve)
     return RunResult(
         final_best=float(np.max(eval_curve)),
         curve=eval_curve,
@@ -326,7 +331,9 @@ def summarize_results(name: str, runs: list[RunResult]) -> dict[str, float]:
         "mean_final_fitness": float(np.mean(finals)),
         "std_final_fitness": float(np.std(finals, ddof=1)) if finals.size > 1 else 0.0,
         "success_rate": float(success),
-        "mean_evals_to_target_if_hit": float(np.mean(hit)) if hit.size > 0 else float("nan"),
+        "mean_evals_to_target_if_hit": (
+            float(np.mean(hit)) if hit.size > 0 else float("nan")
+        ),
     }
 
 
@@ -431,12 +438,12 @@ def run_suite(
             clean_eval_es.close()
 
     summary_rows = [
-        summarize_results("PSO", pso_runs),
-        summarize_results("ES_mu+lambda", es_runs),
+        summarize_results(ALGO_PSO, pso_runs),
+        summarize_results(ALGO_ES, es_runs),
     ]
 
     finals_rows = []
-    for algo_name, algo_runs in (("PSO", pso_runs), ("ES_mu+lambda", es_runs)):
+    for algo_name, algo_runs in ((ALGO_PSO, pso_runs), (ALGO_ES, es_runs)):
         for i, rr in enumerate(algo_runs, start=1):
             finals_rows.append(
                 {
@@ -479,8 +486,8 @@ def analyze_sensitivity_and_noise(
             init_high=hi,
             base_seed=2112,
         )
-        pso_s = summarize_results("PSO", pso_runs)
-        es_s = summarize_results("ES_mu+lambda", es_runs)
+        pso_s = summarize_results(ALGO_PSO, pso_runs)
+        es_s = summarize_results(ALGO_ES, es_runs)
         pso_s["setting"] = label
         es_s["setting"] = label
         sensitivity_rows.extend([pso_s, es_s])
@@ -497,8 +504,8 @@ def analyze_sensitivity_and_noise(
             base_seed=3377,
             reevaluate_best_with_clean=True,
         )
-        pso_s = summarize_results("PSO", pso_runs)
-        es_s = summarize_results("ES_mu+lambda", es_runs)
+        pso_s = summarize_results(ALGO_PSO, pso_runs)
+        es_s = summarize_results(ALGO_ES, es_runs)
         pso_s["noise_std"] = noise
         es_s["noise_std"] = noise
         noise_rows.extend([pso_s, es_s])
@@ -509,8 +516,8 @@ def analyze_sensitivity_and_noise(
 
 
 def pick_faster(summary_rows: list[dict[str, float]]) -> str:
-    pso = next(r for r in summary_rows if r["algorithm"] == "PSO")
-    es = next(r for r in summary_rows if r["algorithm"] == "ES_mu+lambda")
+    pso = next(r for r in summary_rows if r["algorithm"] == ALGO_PSO)
+    es = next(r for r in summary_rows if r["algorithm"] == ALGO_ES)
     pso_t = pso["mean_evals_to_target_if_hit"]
     es_t = es["mean_evals_to_target_if_hit"]
     if math.isnan(pso_t) and math.isnan(es_t):
@@ -525,14 +532,13 @@ def pick_faster(summary_rows: list[dict[str, float]]) -> str:
 def generate_report(
     out_path: Path,
     summary_rows: list[dict[str, float]],
-    sensitivity_rows: list[dict[str, float]],
     noise_rows: list[dict[str, float]],
     runs: int,
     max_evals: int,
     pop_size: int,
 ) -> None:
-    pso = next(r for r in summary_rows if r["algorithm"] == "PSO")
-    es = next(r for r in summary_rows if r["algorithm"] == "ES_mu+lambda")
+    pso = next(r for r in summary_rows if r["algorithm"] == ALGO_PSO)
+    es = next(r for r in summary_rows if r["algorithm"] == ALGO_ES)
 
     if abs(pso["std_final_fitness"] - es["std_final_fitness"]) < 1e-9:
         stable = "Both are effectively tied"
@@ -540,11 +546,21 @@ def generate_report(
         stable = "PSO" if pso["std_final_fitness"] < es["std_final_fitness"] else "ES"
     faster = pick_faster(summary_rows)
     if noise_rows:
-        pso_noise = {float(r["noise_std"]): r for r in noise_rows if r["algorithm"] == "PSO"}
-        es_noise = {float(r["noise_std"]): r for r in noise_rows if r["algorithm"] == "ES_mu+lambda"}
+        pso_noise = {
+            float(r["noise_std"]): r for r in noise_rows if r["algorithm"] == ALGO_PSO
+        }
+        es_noise = {
+            float(r["noise_std"]): r for r in noise_rows if r["algorithm"] == ALGO_ES
+        }
         if 0.0 in pso_noise and 10.0 in pso_noise and 0.0 in es_noise and 10.0 in es_noise:
-            pso_slower = pso_noise[10.0]["mean_evals_to_target_if_hit"] > pso_noise[0.0]["mean_evals_to_target_if_hit"]
-            es_slower = es_noise[10.0]["mean_evals_to_target_if_hit"] > es_noise[0.0]["mean_evals_to_target_if_hit"]
+            pso_slower = (
+                pso_noise[10.0]["mean_evals_to_target_if_hit"]
+                > pso_noise[0.0]["mean_evals_to_target_if_hit"]
+            )
+            es_slower = (
+                es_noise[10.0]["mean_evals_to_target_if_hit"]
+                > es_noise[0.0]["mean_evals_to_target_if_hit"]
+            )
             if pso_slower or es_slower:
                 noise_text = (
                     "In these runs, noisy fitness mostly slowed convergence "
@@ -683,15 +699,12 @@ def main() -> None:
         init_high=1.0,
         base_seed=2026,
     )
-    _ = (pso_runs, es_runs)  # explicit unused marker
-
-    sensitivity_rows: list[dict[str, float]] = []
     noise_rows: list[dict[str, float]] = []
     if args.skip_extra:
         print("Skipping sensitivity/noise experiments (--skip-extra).", flush=True)
     else:
         print("Running initialization-sensitivity and noise experiments...", flush=True)
-        sensitivity_rows, noise_rows = analyze_sensitivity_and_noise(
+        _, noise_rows = analyze_sensitivity_and_noise(
             out_dir=out_dir,
             extra_runs=args.extra_runs,
             extra_max_evals=args.extra_max_evals,
@@ -702,7 +715,6 @@ def main() -> None:
     generate_report(
         out_path=report_path,
         summary_rows=summary_rows,
-        sensitivity_rows=sensitivity_rows,
         noise_rows=noise_rows,
         runs=runs,
         max_evals=max_evals,

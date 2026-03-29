@@ -1,9 +1,0 @@
-algorithm,run,final_best_fitness,evals_to_target
-PSO,1,500.0,230
-PSO,2,500.0,250
-PSO,3,500.0,639
-PSO,4,344.0,-1
-ES_mu+lambda,1,500.0,288
-ES_mu+lambda,2,500.0,305
-ES_mu+lambda,3,500.0,262
-ES_mu+lambda,4,500.0,222

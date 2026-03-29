@@ -1,7 +1,0 @@
-algorithm,mean_final_fitness,std_final_fitness,success_rate,mean_evals_to_target_if_hit,setting
-PSO,500.0,0.0,1.0,144.25,narrow_-0.1_0.1
-ES_mu+lambda,500.0,0.0,1.0,477.5,narrow_-0.1_0.1
-PSO,461.0,78.0,0.75,373.0,required_-1_1
-ES_mu+lambda,500.0,0.0,1.0,269.25,required_-1_1
-PSO,355.45,189.58096775080912,0.5,602.5,wide_-2_2_clipped
-ES_mu+lambda,500.0,0.0,1.0,248.0,wide_-2_2_clipped
