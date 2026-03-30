@@ -14,14 +14,9 @@ import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 import numpy as np
-
-try:
-    import gymnasium as gym
-except ImportError as exc:
-    raise ImportError("gymnasium is required. Install with: pip install gymnasium") from exc
 
 try:
     import matplotlib.pyplot as plt
@@ -31,88 +26,31 @@ except ImportError as exc:
 
 DIM = 49
 FITNESS_TARGET = 475.0
-DEFAULT_EVAL_SEEDS = (11, 23, 37, 41, 59)
 
+def load_black_box_evaluator() -> Callable[[np.ndarray], float]:
+    """Load the assignment-provided evaluator from A4/cartpole_eval.py."""
+    eval_path = Path(__file__).resolve().parent / "cartpole_eval.py"
+    if not eval_path.exists():
+        raise FileNotFoundError(f"Required evaluator not found: {eval_path}")
 
-def decode_weights(w: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-    w = np.asarray(w, dtype=np.float64).reshape(-1)
-    if w.size != DIM:
-        raise ValueError(f"Expected {DIM} parameters, got {w.size}.")
-    idx = 0
-    w1 = w[idx : idx + 32].reshape(4, 8)
-    idx += 32
-    b1 = w[idx : idx + 8]
-    idx += 8
-    w2 = w[idx : idx + 8]
-    idx += 8
-    b2 = float(w[idx])
-    return w1, b1, w2, b2
+    spec = importlib.util.spec_from_file_location("cartpole_eval", eval_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module from: {eval_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
 
-
-class InternalCartPoleEvaluator:
-    def __init__(self, seeds: tuple[int, ...], max_steps: int = 500):
-        self.seeds = tuple(int(s) for s in seeds)
-        self.max_steps = int(max_steps)
-        self.env = gym.make("CartPole-v1")
-
-    def close(self) -> None:
-        self.env.close()
-
-    def evaluate(self, w: np.ndarray) -> float:
-        w1, b1, w2, b2 = decode_weights(w)
-        rewards = []
-        for seed in self.seeds:
-            obs, _ = self.env.reset(seed=seed)
-            total = 0.0
-            for _ in range(self.max_steps):
-                h = np.tanh(obs @ w1 + b1)
-                o = float(h @ w2 + b2)
-                action = 1 if o >= 0.0 else 0
-                obs, reward, terminated, truncated, _ = self.env.step(action)
-                total += reward
-                if terminated or truncated:
-                    break
-            rewards.append(total)
-        return float(np.mean(rewards))
-
-
-def try_external_evaluator(seeds: tuple[int, ...]) -> Optional[Callable[[np.ndarray], float]]:
-    try:
-        mod = importlib.import_module("cartpole_eval")
-    except ModuleNotFoundError:
-        return None
-
-    for fn_name in ("evaluate", "evaluate_candidate", "fitness", "eval_candidate"):
-        fn = getattr(mod, fn_name, None)
-        if callable(fn):
-            def wrapped(w: np.ndarray, _fn=fn, _seeds=seeds) -> float:
-                for call in (
-                    lambda: _fn(w, seeds=_seeds),
-                    lambda: _fn(w, _seeds),
-                    lambda: _fn(w),
-                ):
-                    try:
-                        return float(call())
-                    except TypeError:
-                        continue
-                return float(_fn(w))
-
-            return wrapped
-    return None
+    evaluate_fn = getattr(module, "evaluate", None)
+    if not callable(evaluate_fn):
+        raise AttributeError("cartpole_eval.py must define a callable `evaluate(w)`.")
+    return evaluate_fn
 
 
 class FitnessFunction:
-    def __init__(self, seeds: tuple[int, ...]):
-        self.internal = InternalCartPoleEvaluator(seeds)
-        self.external = try_external_evaluator(seeds)
-
-    def close(self) -> None:
-        self.internal.close()
+    def __init__(self):
+        self.evaluate_fn = load_black_box_evaluator()
 
     def __call__(self, w: np.ndarray) -> float:
-        if self.external is not None:
-            return float(self.external(w))
-        return float(self.internal.evaluate(w))
+        return float(self.evaluate_fn(w))
 
 
 def evaluate_population(pop: np.ndarray, fitness_fn: FitnessFunction) -> np.ndarray:
@@ -244,20 +182,17 @@ def run_experiment(
     t0 = time.time()
     for i in range(runs):
         rng = np.random.default_rng(base_seed + 1000 * i)
-        fitness_fn = FitnessFunction(DEFAULT_EVAL_SEEDS)
-        try:
-            result = run_es_mu_plus_lambda(
-                fitness_fn=fitness_fn,
-                rng=rng,
-                max_evals=max_evals,
-                pop_size=pop_size,
-                mu=mu,
-                init_low=init_low,
-                init_high=init_high,
-            )
-            results.append(result)
-        finally:
-            fitness_fn.close()
+        fitness_fn = FitnessFunction()
+        result = run_es_mu_plus_lambda(
+            fitness_fn=fitness_fn,
+            rng=rng,
+            max_evals=max_evals,
+            pop_size=pop_size,
+            mu=mu,
+            init_low=init_low,
+            init_high=init_high,
+        )
+        results.append(result)
         print(f"Run {i + 1}/{runs} completed ({time.time() - t0:.1f}s elapsed)")
 
     summary = summarize_runs(results)
