@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import argparse
 import csv
-import importlib
 import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
+from cartpole_eval import PARAM_DIM, evaluate
 
 try:
     import matplotlib.pyplot as plt
@@ -24,37 +23,11 @@ except ImportError as exc:
     raise ImportError("matplotlib is required. Install with: pip install matplotlib") from exc
 
 
-DIM = 49
+DIM = PARAM_DIM
 FITNESS_TARGET = 475.0
 
-def load_black_box_evaluator() -> Callable[[np.ndarray], float]:
-    """Load the assignment-provided evaluator from A4/cartpole_eval.py."""
-    eval_path = Path(__file__).resolve().parent / "cartpole_eval.py"
-    if not eval_path.exists():
-        raise FileNotFoundError(f"Required evaluator not found: {eval_path}")
-
-    spec = importlib.util.spec_from_file_location("cartpole_eval", eval_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load module from: {eval_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    evaluate_fn = getattr(module, "evaluate", None)
-    if not callable(evaluate_fn):
-        raise AttributeError("cartpole_eval.py must define a callable `evaluate(w)`.")
-    return evaluate_fn
-
-
-class FitnessFunction:
-    def __init__(self):
-        self.evaluate_fn = load_black_box_evaluator()
-
-    def __call__(self, w: np.ndarray) -> float:
-        return float(self.evaluate_fn(w))
-
-
-def evaluate_population(pop: np.ndarray, fitness_fn: FitnessFunction) -> np.ndarray:
-    return np.asarray([fitness_fn(ind) for ind in pop], dtype=np.float64)
+def evaluate_population(pop: np.ndarray) -> np.ndarray:
+    return np.asarray([evaluate(ind) for ind in pop], dtype=np.float64)
 
 
 def push_curve(curve: np.ndarray, start: int, values: np.ndarray, best_so_far: float) -> float:
@@ -78,7 +51,6 @@ class RunResult:
 
 
 def run_pso(
-    fitness_fn: FitnessFunction,
     rng: np.random.Generator,
     max_evals: int,
     pop_size: int,
@@ -89,7 +61,7 @@ def run_pso(
     v = rng.uniform(-0.1, 0.1, size=(pop_size, DIM))
     pbest = x.copy()
 
-    fx = evaluate_population(x, fitness_fn)
+    fx = evaluate_population(x)
     pbest_f = fx.copy()
     g_idx = int(np.argmax(fx))
     gbest = x[g_idx].copy()
@@ -110,7 +82,7 @@ def run_pso(
         v = np.clip(v, -vmax, vmax)
         x = np.clip(x + v, -1.0, 1.0)
 
-        fx = evaluate_population(x, fitness_fn)
+        fx = evaluate_population(x)
         running_best = push_curve(curve, eval_idx, fx, running_best)
         eval_idx += pop_size
 
@@ -184,9 +156,7 @@ def run_experiment(
     t0 = time.time()
     for i in range(runs):
         rng = np.random.default_rng(base_seed + 1000 * i)
-        fitness_fn = FitnessFunction()
         result = run_pso(
-            fitness_fn=fitness_fn,
             rng=rng,
             max_evals=max_evals,
             pop_size=pop_size,
